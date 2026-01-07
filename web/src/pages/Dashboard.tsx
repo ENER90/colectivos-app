@@ -368,7 +368,7 @@ export const Dashboard: React.FC = () => {
                 />
               </div>
               <button onClick={handleUpdateLocation} className="btn-action btn-update">
-                📍 Actualizar ubicación
+                Actualizar ubicación
               </button>
               <div className="info-box">
                 <p>
