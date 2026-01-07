@@ -18,7 +18,8 @@
 .header-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .dashboard-header h1 {
@@ -27,12 +28,21 @@
   color: #333;
 }
 
+.route-badge {
+  background: #F4C430;
+  color: #2C3E50;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .user-badge {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
+  background: #E8E8E8;
+  color: #2C3E50;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 

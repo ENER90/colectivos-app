@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
 import { Icon } from "leaflet";
 import { useAuth } from "../context/AuthContext";
 import { socketService } from "../services/socket.service";
 import type { Driver, Passenger, Location } from "../types";
+import { ROUTE_STOPS, MAP_CONFIG, ROUTE_INFO } from "../config/route.config";
 import "leaflet/dist/leaflet.css";
 import "./Dashboard.css";
 
@@ -35,6 +36,15 @@ const myLocationIcon = new Icon({
   shadowSize: [41, 41],
 });
 
+const stopIcon = new Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-yellow.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [20, 33],
+  iconAnchor: [10, 33],
+  popupAnchor: [0, -28],
+  shadowSize: [33, 33],
+});
+
 const RecenterMap: React.FC<{ center: [number, number] }> = ({ center }) => {
   const map = useMap();
   useEffect(() => {
@@ -54,7 +64,7 @@ export const Dashboard: React.FC = () => {
   const [error, setError] = useState("");
   const [availableSeats, setAvailableSeats] = useState(4);
 
-  const defaultCenter: [number, number] = [-33.4500, -70.6500]; // Santiago, Chile
+  const defaultCenter: [number, number] = MAP_CONFIG.center;
 
   useEffect(() => {
     if (!user) {
@@ -64,11 +74,45 @@ export const Dashboard: React.FC = () => {
 
     getLocation();
     setupSocketListeners();
+    loadInitialData();
 
     return () => {
       cleanupSocketListeners();
     };
   }, [user, navigate]);
+
+  const loadInitialData = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      if (user?.role === "driver") {
+        // Cargar pasajeros esperando
+        const response = await fetch("http://localhost:3005/api/passengers/waiting", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        if (data.passengers) {
+          setPassengers(data.passengers);
+        }
+      } else if (user?.role === "passenger") {
+        // Cargar conductores activos
+        const response = await fetch("http://localhost:3005/api/drivers/active", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        if (data.drivers) {
+          setDrivers(data.drivers);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading initial data:", error);
+    }
+  };
 
   const getLocation = () => {
     if ("geolocation" in navigator) {
@@ -198,9 +242,10 @@ export const Dashboard: React.FC = () => {
     <div className="dashboard">
       <header className="dashboard-header">
         <div className="header-left">
-          <h1>🚖 Colectivos</h1>
+          <h1>Colectivos</h1>
+          <span className="route-badge">Ruta {ROUTE_INFO.code}: {ROUTE_INFO.name}</span>
           <span className="user-badge">
-            {user?.role === "driver" ? "🚗 Conductor" : "👤 Pasajero"} - {user?.username}
+            {user?.role === "driver" ? "Conductor" : "Pasajero"} - {user?.username}
           </span>
         </div>
         <button onClick={handleLogout} className="btn-logout">
@@ -213,8 +258,11 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-content">
         <div className="map-container">
           <MapContainer
-            center={[myLocation.latitude, myLocation.longitude]}
-            zoom={14}
+            center={MAP_CONFIG.center}
+            zoom={MAP_CONFIG.defaultZoom}
+            minZoom={MAP_CONFIG.minZoom}
+            maxZoom={MAP_CONFIG.maxZoom}
+            maxBounds={MAP_CONFIG.bounds}
             style={{ height: "100%", width: "100%" }}
           >
             <TileLayer
@@ -223,12 +271,29 @@ export const Dashboard: React.FC = () => {
             />
             <RecenterMap center={[myLocation.latitude, myLocation.longitude]} />
 
+            {/* Paraderos de la ruta */}
+            {ROUTE_STOPS.map((stop, index) => (
+              <Marker key={`stop-${index}`} position={stop.coordinates} icon={stopIcon}>
+                <Popup>
+                  <div style={{ textAlign: "center" }}>
+                    <strong style={{ color: "#F4C430" }}>{stop.name}</strong>
+                    <br />
+                    <span style={{ fontSize: "0.85em", color: "#7F8C8D" }}>
+                      {stop.description}
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
+            {/* Mi ubicación */}
             <Marker position={[myLocation.latitude, myLocation.longitude]} icon={myLocationIcon}>
               <Popup>
                 <strong>Tu ubicación</strong>
               </Popup>
             </Marker>
 
+            {/* Pasajeros esperando (solo visible para conductores) */}
             {user?.role === "driver" &&
               passengers.map((passenger) => (
                 <Marker
@@ -237,13 +302,14 @@ export const Dashboard: React.FC = () => {
                   icon={passengerIcon}
                 >
                   <Popup>
-                    <strong>{passenger.username}</strong>
+                    <strong>Pasajero: {passenger.username}</strong>
                     <br />
                     Esperando...
                   </Popup>
                 </Marker>
               ))}
 
+            {/* Conductores activos (solo visible para pasajeros) */}
             {user?.role === "passenger" &&
               drivers.map((driver) => (
                 <Marker
@@ -252,7 +318,7 @@ export const Dashboard: React.FC = () => {
                   icon={driverIcon}
                 >
                   <Popup>
-                    <strong>{driver.username}</strong>
+                    <strong>Conductor: {driver.username}</strong>
                     <br />
                     Asientos disponibles: {driver.availableSeats}
                   </Popup>
