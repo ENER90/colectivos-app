@@ -1,7 +1,7 @@
 import { io, Socket } from "socket.io-client";
 
 // Cambia esta URL a tu IP local o servidor
-const SOCKET_URL = "http://localhost:3005";
+const SOCKET_URL = "http://192.168.1.97:3005";
 
 class SocketService {
   private socket: Socket | null = null;

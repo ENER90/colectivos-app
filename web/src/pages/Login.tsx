@@ -31,7 +31,7 @@ export const Login: React.FC = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-header">
-          <h1>🚖 Colectivos</h1>
+          <h1>Colectivos</h1>
           <p>Inicia sesión para continuar</p>
         </div>
 
