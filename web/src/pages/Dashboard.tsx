@@ -1,70 +1,318 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { Icon } from "leaflet";
 import { useAuth } from "../context/AuthContext";
+import { socketService } from "../services/socket.service";
+import type { Driver, Passenger, Location } from "../types";
+import "leaflet/dist/leaflet.css";
+import "./Dashboard.css";
 
-const Dashboard: React.FC = () => {
+const passengerIcon = new Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const driverIcon = new Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const myLocationIcon = new Icon({
+  iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+const RecenterMap: React.FC<{ center: [number, number] }> = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+};
+
+export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const [myLocation, setMyLocation] = useState<Location | null>(null);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [passengers, setPassengers] = useState<Passenger[]>([]);
+  const [error, setError] = useState("");
+  const [availableSeats, setAvailableSeats] = useState(4);
+
+  const defaultCenter: [number, number] = [-33.4500, -70.6500]; // Santiago, Chile
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    getLocation();
+    setupSocketListeners();
+
+    return () => {
+      cleanupSocketListeners();
+    };
+  }, [user, navigate]);
+
+  const getLocation = () => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setMyLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+          setError("No se pudo obtener tu ubicación");
+          setMyLocation({
+            latitude: defaultCenter[0],
+            longitude: defaultCenter[1],
+          });
+        }
+      );
+    } else {
+      setError("Geolocalización no disponible");
+      setMyLocation({
+        latitude: defaultCenter[0],
+        longitude: defaultCenter[1],
+      });
+    }
+  };
+
+  const setupSocketListeners = () => {
+    if (user?.role === "driver") {
+      socketService.on("passenger:new-waiting", handleNewPassenger);
+      socketService.on("passenger:cancelled", handlePassengerCancelled);
+    } else if (user?.role === "passenger") {
+      socketService.on("driver:location-updated", handleDriverUpdate);
+    }
+
+    socketService.on("passenger:waiting-success", () => {
+      setIsWaiting(true);
+    });
+
+    socketService.on("passenger:cancel-success", () => {
+      setIsWaiting(false);
+    });
+
+    socketService.on("driver:location-update-success", () => {
+      console.log("Location updated");
+    });
+  };
+
+  const cleanupSocketListeners = () => {
+    socketService.off("passenger:new-waiting");
+    socketService.off("passenger:cancelled");
+    socketService.off("driver:location-updated");
+    socketService.off("passenger:waiting-success");
+    socketService.off("passenger:cancel-success");
+    socketService.off("driver:location-update-success");
+  };
+
+  const handleNewPassenger = (data: Passenger) => {
+    setPassengers((prev) => {
+      const exists = prev.find((p) => p.id === data.id);
+      if (exists) return prev;
+      return [...prev, data];
+    });
+  };
+
+  const handlePassengerCancelled = (data: { passengerId: string }) => {
+    setPassengers((prev) => prev.filter((p) => p.id !== data.passengerId));
+  };
+
+  const handleDriverUpdate = (data: Driver) => {
+    setDrivers((prev) => {
+      const index = prev.findIndex((d) => d.id === data.id);
+      if (index >= 0) {
+        const newDrivers = [...prev];
+        newDrivers[index] = data;
+        return newDrivers;
+      }
+      return [...prev, data];
+    });
+  };
+
+  const handleMarkAsWaiting = () => {
+    if (!myLocation) {
+      setError("Ubicación no disponible");
+      return;
+    }
+
+    socketService.emit("passenger:waiting", {
+      latitude: myLocation.latitude,
+      longitude: myLocation.longitude,
+    });
+  };
+
+  const handleCancelWaiting = () => {
+    socketService.emit("passenger:cancel");
+  };
+
+  const handleUpdateLocation = () => {
+    if (!myLocation) {
+      setError("Ubicación no disponible");
+      return;
+    }
+
+    socketService.emit("driver:location-update", {
+      latitude: myLocation.latitude,
+      longitude: myLocation.longitude,
+      availableSeats,
+    });
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  if (!myLocation) {
+    return (
+      <div className="dashboard-loading">
+        <div className="spinner"></div>
+        <p>Obteniendo ubicación...</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-        <h1>Dashboard - Colectivos App</h1>
-        <button onClick={logout} style={{ padding: "10px 20px" }}>
+    <div className="dashboard">
+      <header className="dashboard-header">
+        <div className="header-left">
+          <h1>🚖 Colectivos</h1>
+          <span className="user-badge">
+            {user?.role === "driver" ? "🚗 Conductor" : "👤 Pasajero"} - {user?.username}
+          </span>
+        </div>
+        <button onClick={handleLogout} className="btn-logout">
           Cerrar Sesión
         </button>
-      </div>
+      </header>
 
-      <div style={{ marginBottom: "30px" }}>
-        <h2>Información del Usuario</h2>
-        <p>
-          <strong>Usuario:</strong> {user?.username}
-        </p>
-        <p>
-          <strong>Email:</strong> {user?.email}
-        </p>
-        <p>
-          <strong>Rol:</strong> {user?.role}
-        </p>
-      </div>
+      {error && <div className="dashboard-error">{error}</div>}
 
-      <div>
-        <h2>Mapa en Tiempo Real</h2>
-        <div
-          style={{
-            width: "100%",
-            height: "400px",
-            backgroundColor: "#e0e0e0",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            borderRadius: "8px",
-          }}
-        >
-          <p>Mapa será integrado aquí (Mapbox/Leaflet)</p>
+      <div className="dashboard-content">
+        <div className="map-container">
+          <MapContainer
+            center={[myLocation.latitude, myLocation.longitude]}
+            zoom={14}
+            style={{ height: "100%", width: "100%" }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <RecenterMap center={[myLocation.latitude, myLocation.longitude]} />
+
+            <Marker position={[myLocation.latitude, myLocation.longitude]} icon={myLocationIcon}>
+              <Popup>
+                <strong>Tu ubicación</strong>
+              </Popup>
+            </Marker>
+
+            {user?.role === "driver" &&
+              passengers.map((passenger) => (
+                <Marker
+                  key={passenger.id}
+                  position={[passenger.location.latitude, passenger.location.longitude]}
+                  icon={passengerIcon}
+                >
+                  <Popup>
+                    <strong>{passenger.username}</strong>
+                    <br />
+                    Esperando...
+                  </Popup>
+                </Marker>
+              ))}
+
+            {user?.role === "passenger" &&
+              drivers.map((driver) => (
+                <Marker
+                  key={driver.id}
+                  position={[driver.location.latitude, driver.location.longitude]}
+                  icon={driverIcon}
+                >
+                  <Popup>
+                    <strong>{driver.username}</strong>
+                    <br />
+                    Asientos disponibles: {driver.availableSeats}
+                  </Popup>
+                </Marker>
+              ))}
+          </MapContainer>
+        </div>
+
+        <div className="controls-panel">
+          {user?.role === "passenger" && (
+            <div className="passenger-controls">
+              <h3>Control de Pasajero</h3>
+              {!isWaiting ? (
+                <button onClick={handleMarkAsWaiting} className="btn-action btn-waiting">
+                  📍 Marcar como esperando
+                </button>
+              ) : (
+                <div>
+                  <div className="status-waiting">
+                    <span className="pulse"></span>
+                    Esperando conductor...
+                  </div>
+                  <button onClick={handleCancelWaiting} className="btn-action btn-cancel">
+                    ❌ Cancelar espera
+                  </button>
+                </div>
+              )}
+              <div className="info-box">
+                <p>
+                  <strong>Conductores cercanos:</strong> {drivers.length}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {user?.role === "driver" && (
+            <div className="driver-controls">
+              <h3>Control de Conductor</h3>
+              <div className="form-group">
+                <label>Asientos disponibles</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="4"
+                  value={availableSeats}
+                  onChange={(e) => setAvailableSeats(Number(e.target.value))}
+                />
+              </div>
+              <button onClick={handleUpdateLocation} className="btn-action btn-update">
+                📍 Actualizar ubicación
+              </button>
+              <div className="info-box">
+                <p>
+                  <strong>Pasajeros esperando:</strong> {passengers.length}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {user?.role === "passenger" && (
-        <div style={{ marginTop: "20px" }}>
-          <button style={{ padding: "15px 30px", fontSize: "16px" }}>
-            Marcar como esperando
-          </button>
-        </div>
-      )}
-
-      {user?.role === "driver" && (
-        <div style={{ marginTop: "20px" }}>
-          <h3>Estado del Conductor</h3>
-          <p>Asientos disponibles: 4</p>
-          <button style={{ padding: "15px 30px", fontSize: "16px", marginRight: "10px" }}>
-            Actualizar ubicación
-          </button>
-          <button style={{ padding: "15px 30px", fontSize: "16px" }}>
-            Ver pasajeros cercanos
-          </button>
-        </div>
-      )}
     </div>
   );
 };
-
-export default Dashboard;

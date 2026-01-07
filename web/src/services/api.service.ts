@@ -1,7 +1,7 @@
 import axios from "axios";
 import type { AuthResponse } from "../types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3004";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3005";
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,
