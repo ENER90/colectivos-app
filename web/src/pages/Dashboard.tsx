@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
 import { Icon } from "leaflet";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { ConnectionStatus } from "../components/ConnectionStatus";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { socketService } from "../services/socket.service";
 import type { Driver, Passenger, Location } from "../types";
 import { ROUTE_STOPS, MAP_CONFIG, ROUTE_INFO } from "../config/route.config";
@@ -55,6 +58,7 @@ const RecenterMap: React.FC<{ center: [number, number] }> = ({ center }) => {
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const { success, error: showError, info, warning } = useToast();
   const navigate = useNavigate();
 
   const [myLocation, setMyLocation] = useState<Location | null>(null);
@@ -63,6 +67,7 @@ export const Dashboard: React.FC = () => {
   const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [error, setError] = useState("");
   const [availableSeats, setAvailableSeats] = useState(4);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const defaultCenter: [number, number] = MAP_CONFIG.center;
 
@@ -122,10 +127,13 @@ export const Dashboard: React.FC = () => {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
           });
+          success("Ubicación obtenida correctamente");
         },
         (error) => {
           console.error("Error getting location:", error);
-          setError("No se pudo obtener tu ubicación");
+          const errorMsg = "No se pudo obtener tu ubicación";
+          setError(errorMsg);
+          showError(errorMsg);
           setMyLocation({
             latitude: defaultCenter[0],
             longitude: defaultCenter[1],
@@ -133,7 +141,9 @@ export const Dashboard: React.FC = () => {
         }
       );
     } else {
-      setError("Geolocalización no disponible");
+      const errorMsg = "Geolocalización no disponible";
+      setError(errorMsg);
+      showError(errorMsg);
       setMyLocation({
         latitude: defaultCenter[0],
         longitude: defaultCenter[1],
@@ -175,6 +185,7 @@ export const Dashboard: React.FC = () => {
     setPassengers((prev) => {
       const exists = prev.find((p) => p.id === data.id);
       if (exists) return prev;
+      info(`Nuevo pasajero esperando: ${data.username}`);
       return [...prev, data];
     });
   };
@@ -191,13 +202,16 @@ export const Dashboard: React.FC = () => {
         newDrivers[index] = data;
         return newDrivers;
       }
+      info(`Conductor disponible: ${data.username} (${data.availableSeats} asientos)`);
       return [...prev, data];
     });
   };
 
   const handleMarkAsWaiting = () => {
     if (!myLocation) {
-      setError("Ubicación no disponible");
+      const errorMsg = "Ubicación no disponible";
+      setError(errorMsg);
+      showError(errorMsg);
       return;
     }
 
@@ -205,15 +219,26 @@ export const Dashboard: React.FC = () => {
       latitude: myLocation.latitude,
       longitude: myLocation.longitude,
     });
+    setIsWaiting(true);
+    success("Ahora estás esperando un colectivo");
   };
 
   const handleCancelWaiting = () => {
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancelWaiting = () => {
     socketService.emit("passenger:cancel");
+    setIsWaiting(false);
+    setShowCancelConfirm(false);
+    info("Has cancelado la espera");
   };
 
   const handleUpdateLocation = () => {
     if (!myLocation) {
-      setError("Ubicación no disponible");
+      const errorMsg = "Ubicación no disponible";
+      setError(errorMsg);
+      showError(errorMsg);
       return;
     }
 
@@ -222,6 +247,7 @@ export const Dashboard: React.FC = () => {
       longitude: myLocation.longitude,
       availableSeats,
     });
+    success("Ubicación actualizada correctamente");
   };
 
   const handleLogout = () => {
@@ -240,6 +266,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
+      <ConnectionStatus />
       <header className="dashboard-header">
         <div className="header-left">
           <h1>Colectivos</h1>
@@ -333,7 +360,7 @@ export const Dashboard: React.FC = () => {
               <h3>Control de Pasajero</h3>
               {!isWaiting ? (
                 <button onClick={handleMarkAsWaiting} className="btn-action btn-waiting">
-                  📍 Marcar como esperando
+                  Marcar como esperando
                 </button>
               ) : (
                 <div>
@@ -342,7 +369,7 @@ export const Dashboard: React.FC = () => {
                     Esperando conductor...
                   </div>
                   <button onClick={handleCancelWaiting} className="btn-action btn-cancel">
-                    ❌ Cancelar espera
+                    Cancelar espera
                   </button>
                 </div>
               )}
@@ -379,6 +406,16 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={showCancelConfirm}
+        title="Cancelar espera"
+        message="¿Estás seguro de que deseas cancelar tu espera? Los conductores ya no podrán verte en el mapa."
+        confirmText="Sí, cancelar"
+        cancelText="No, seguir esperando"
+        onConfirm={confirmCancelWaiting}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 };
