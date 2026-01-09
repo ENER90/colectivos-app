@@ -11,21 +11,24 @@ import {
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { ConnectionStatus } from "../components/ConnectionStatus";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import socketService from "../services/socket.service";
 import api from "../services/api.service";
 import type { Passenger, Driver, Location as LocationType } from "../types";
+import { ROUTE_INFO, MAP_CONFIG, ROUTE_STOPS } from "../config/route.config";
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
-  const [myLocation, setMyLocation] = useState<LocationType>({
-    latitude: -33.4489,
-    longitude: -70.6693,
-  });
+  const { success, error: showError, info } = useToast();
+  const [myLocation, setMyLocation] = useState<LocationType>(MAP_CONFIG.center);
   const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [isWaiting, setIsWaiting] = useState(false);
   const [availableSeats, setAvailableSeats] = useState(4);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   useEffect(() => {
     requestLocationPermission();
@@ -42,7 +45,8 @@ export default function DashboardScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permiso denegado", "Necesitamos acceso a tu ubicación");
+        showError("Necesitamos acceso a tu ubicación");
+        setIsLoading(false);
         return;
       }
 
@@ -51,10 +55,11 @@ export default function DashboardScreen() {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       });
-
+      success("Ubicación obtenida correctamente");
       setIsLoading(false);
     } catch (error) {
       console.error("Error getting location:", error);
+      showError("No se pudo obtener tu ubicación");
       setIsLoading(false);
     }
   };
@@ -64,7 +69,13 @@ export default function DashboardScreen() {
     if (!socket) return;
 
     socket.on("passenger:waiting", (data: Passenger) => {
-      setPassengers((prev) => [...prev.filter((p) => p.id !== data.id), data]);
+      setPassengers((prev) => {
+        const exists = prev.find((p) => p.id === data.id);
+        if (!exists && user?.role === "driver") {
+          info(`Nuevo pasajero esperando: ${data.username}`);
+        }
+        return [...prev.filter((p) => p.id !== data.id), data];
+      });
     });
 
     socket.on("passenger:cancelled", (data: { passengerId: string }) => {
@@ -72,7 +83,13 @@ export default function DashboardScreen() {
     });
 
     socket.on("driver:location", (data: Driver) => {
-      setDrivers((prev) => [...prev.filter((d) => d.id !== data.id), data]);
+      setDrivers((prev) => {
+        const exists = prev.find((d) => d.id === data.id);
+        if (!exists && user?.role === "passenger") {
+          info(`Conductor disponible: ${data.username} (${data.availableSeats} asientos)`);
+        }
+        return [...prev.filter((d) => d.id !== data.id), data];
+      });
     });
   };
 
@@ -84,20 +101,26 @@ export default function DashboardScreen() {
         location: myLocation,
         username: user?.username,
       });
-      Alert.alert("Éxito", "Marcado como esperando");
+      success("Ahora estás esperando un colectivo");
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Error al marcar como esperando");
+      showError(error.response?.data?.message || "Error al marcar como esperando");
     }
   };
 
-  const handleCancelWaiting = async () => {
+  const handleCancelWaiting = () => {
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancelWaiting = async () => {
     try {
       await api.post("/passengers/cancel");
       setIsWaiting(false);
+      setShowCancelConfirm(false);
       socketService.emit("passenger:cancel");
-      Alert.alert("Éxito", "Espera cancelada");
+      info("Has cancelado la espera");
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Error al cancelar");
+      showError(error.response?.data?.message || "Error al cancelar");
+      setShowCancelConfirm(false);
     }
   };
 
@@ -122,9 +145,9 @@ export default function DashboardScreen() {
         username: user?.username,
       });
 
-      Alert.alert("Éxito", "Ubicación actualizada");
+      success("Ubicación actualizada correctamente");
     } catch (error: any) {
-      Alert.alert("Error", error.response?.data?.message || "Error al actualizar ubicación");
+      showError(error.response?.data?.message || "Error al actualizar ubicación");
     }
   };
 
@@ -146,9 +169,13 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
+      <ConnectionStatus />
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Colectivos</Text>
+          <Text style={styles.routeBadge}>
+            Ruta {ROUTE_INFO.code}: {ROUTE_INFO.name}
+          </Text>
           <Text style={styles.userBadge}>
             {user?.role === "driver" ? "Conductor" : "Pasajero"} - {user?.username}
           </Text>
@@ -161,19 +188,23 @@ export default function DashboardScreen() {
       <MapView
         style={styles.map}
         provider={PROVIDER_GOOGLE}
-        initialRegion={{
-          latitude: myLocation.latitude,
-          longitude: myLocation.longitude,
-          latitudeDelta: 0.05,
-          longitudeDelta: 0.05,
-        }}
+        initialRegion={MAP_CONFIG.initialRegion}
         showsUserLocation
         showsMyLocationButton
       >
+        {ROUTE_STOPS.map((stop, index) => (
+          <Marker
+            key={`stop-${index}`}
+            coordinate={stop.coordinates}
+            title={stop.name}
+            description={stop.description}
+            pinColor="#F4C430"
+          />
+        ))}
         <Marker
           coordinate={myLocation}
           title="Tu ubicación"
-          pinColor="#F4C430"
+          pinColor="#E74C3C"
         />
 
         {user?.role === "driver" &&
@@ -259,6 +290,16 @@ export default function DashboardScreen() {
           </View>
         )}
       </View>
+
+      <ConfirmDialog
+        visible={showCancelConfirm}
+        title="Cancelar espera"
+        message="¿Estás seguro de que deseas cancelar tu espera? Los conductores ya no podrán verte en el mapa."
+        confirmText="Sí, cancelar"
+        cancelText="No, seguir esperando"
+        onConfirm={confirmCancelWaiting}
+        onCancel={() => setShowCancelConfirm(false)}
+      />
     </View>
   );
 }
@@ -293,13 +334,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#2C3E50",
   },
+  routeBadge: {
+    fontSize: 11,
+    color: "#F4C430",
+    fontWeight: "600",
+    marginTop: 2,
+  },
   userBadge: {
     fontSize: 12,
     color: "#7F8C8D",
-    marginTop: 4,
+    marginTop: 2,
   },
   logoutButton: {
-    backgroundColor: "#E74C3C",
+    backgroundColor: "#2C3E50",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -342,7 +389,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F4C430",
   },
   buttonDanger: {
-    backgroundColor: "#E74C3C",
+    backgroundColor: "#7F8C8D",
   },
   buttonText: {
     color: "#2C3E50",
@@ -359,6 +406,7 @@ const styles = StyleSheet.create({
   waitingText: {
     color: "#2C3E50",
     fontWeight: "600",
+    fontSize: 14,
   },
   infoBox: {
     backgroundColor: "#F5F5F5",

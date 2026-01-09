@@ -2,6 +2,7 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { ToastProvider } from "./src/context/ToastContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import DashboardScreen from "./src/screens/DashboardScreen";
@@ -43,7 +44,9 @@ function Navigation() {
 export default function App() {
   return (
     <AuthProvider>
-      <Navigation />
+      <ToastProvider>
+        <Navigation />
+      </ToastProvider>
     </AuthProvider>
   );
 }
