@@ -1,71 +1,62 @@
-# 🚀 Colectivos App
+# Colectivos App
 
-Real-time coordination app for taxi colectivos in Chile - Multi-platform frontend (Web + Mobile Native).
+App de coordinación en tiempo real para taxis colectivos en Chile (web PWA + móvil nativo).
 
-## 📂 Project Structure
+**Frontend:** React 19 · TypeScript · Vite · Expo / React Native · Socket.io  
+**Backend:** [colectivos-api](https://github.com/ENER90/colectivos-api)
+
+> Producto de dominio real: pasajeros y conductores, geolocalización y demanda en mapa.
+
+## Project structure
 
 ```
 colectivos-app/
-├── web/          # Progressive Web App (React + TypeScript + Vite)
-└── mobile/       # React Native App (Expo + TypeScript)
+├── web/      # PWA (React + TypeScript + Vite)
+└── mobile/   # React Native (Expo + TypeScript)
 ```
 
-## 🌐 Web App (PWA)
+## Features
 
-Progressive Web App optimized for mobile browsers with real-time coordination features.
+- Auth por rol (pasajero / conductor)
+- Ubicación en tiempo real
+- Mapas con visualización de demanda
+- Estado de espera del pasajero
+- Disponibilidad del conductor
+- Notificaciones vía WebSocket
 
-**Tech Stack:**
-- React 19 + TypeScript
-- Vite
-- Socket.io Client
-- React Router
-- Geolocation API
+## Web (PWA)
 
-**Setup:**
 ```bash
 cd web
 npm install
 npm run dev
 ```
 
-More details: [web/README.md](./web/README.md)
+Stack: React 19, TypeScript, Vite, Socket.io Client, React Router, Geolocation API.  
+Detalle: [web/README.md](./web/README.md)
 
-## 📱 Mobile App (Native)
+## Mobile (Expo)
 
-Native mobile application built with Expo for iOS and Android.
-
-**Tech Stack:**
-- React Native
-- Expo
-- TypeScript
-- Socket.io Client
-- React Navigation
-- Expo Location
-
-**Setup:**
 ```bash
 cd mobile
 npm install
 npx expo start
 ```
 
-More details: [mobile/README.md](./mobile/README.md)
+Stack: React Native, Expo, TypeScript, Socket.io Client, React Navigation, Expo Location.  
+Detalle: [mobile/README.md](./mobile/README.md)
 
-## 🔗 Backend API
+## Backend
 
-Both apps connect to the same backend API:
-- Repository: [colectivos-api](https://github.com/YOUR_USERNAME/colectivos-api)
-- API Docs: See backend README
+Ambas apps usan la misma API:
 
-## 🚀 Features
+- Repo: https://github.com/ENER90/colectivos-api
+- Docs: ver README del backend
 
-- User authentication (passenger/driver)
-- Real-time location sharing
-- Interactive maps with demand visualization
-- Passenger waiting status
-- Driver availability updates
-- Real-time notifications via WebSocket
+## Author
 
-## 📖 License
+[René Del Valle Rodríguez](https://github.com/ENER90) · [LinkedIn](https://www.linkedin.com/in/renédelvalle)
+
+## License
 
 MIT
