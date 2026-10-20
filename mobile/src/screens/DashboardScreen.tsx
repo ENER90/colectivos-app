@@ -116,7 +116,7 @@ export default function DashboardScreen() {
       await api.post("/passengers/cancel");
       setIsWaiting(false);
       setShowCancelConfirm(false);
-      socketService.emit("passenger:cancel");
+      socketService.emit("passenger:cancel", undefined);
       info("Has cancelado la espera");
     } catch (error: any) {
       showError(error.response?.data?.message || "Error al cancelar");

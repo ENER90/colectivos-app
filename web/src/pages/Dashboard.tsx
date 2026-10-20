@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { Icon } from "leaflet";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
@@ -58,7 +58,7 @@ const RecenterMap: React.FC<{ center: [number, number] }> = ({ center }) => {
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
-  const { success, error: showError, info, warning } = useToast();
+  const { success, error: showError, info } = useToast();
   const navigate = useNavigate();
 
   const [myLocation, setMyLocation] = useState<Location | null>(null);
